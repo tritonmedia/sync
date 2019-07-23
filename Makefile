@@ -14,3 +14,9 @@ SHELL=/bin/bash
 build:
 	@echo " ===> building releases in ./bin/... <=== "
 	GOBIN=$(BINDIR) $(GO) build -o $(BINDIR)/sync -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)' $(PACKAGE)/cmd/...
+
+.PHONY: release
+release:
+	gox -output "release/sync-{{ .OS }}-{{ .Arch }}" \
+		-osarch "windows/amd64 linux/amd64 darwin/amd64 windows/386 linux/386 darwin/386" \
+		$(PACKAGE)/cmd/...

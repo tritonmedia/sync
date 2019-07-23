@@ -1,0 +1,9 @@
+version: v1
+s3:
+  endpoint: storage.googleapis.com
+  accessKey: ""
+  secretAccessKey: ""
+  bucket: "triton-media"
+
+# Absolute path to store media into, working directory if empty
+saveDir: ""

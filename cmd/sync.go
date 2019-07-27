@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cheggaaa/pb/v3"
+	"github.com/dustin/go-humanize"
 	"github.com/minio/minio-go"
 	"github.com/sirupsen/logrus"
 	"github.com/tritonmedia/sync/pkg/config"
@@ -95,6 +97,10 @@ func downloadObject(m *minio.Client, bucket, key, savePath string) error {
 }
 
 func main() {
+	if strings.ToLower(os.Getenv("SYNC_LOGGER")) == "json" {
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+	}
+
 	conf, err := config.Load()
 	if err != nil {
 		logrus.Fatalf("failed to read config: %v", err)
@@ -125,66 +131,82 @@ func main() {
 		return
 	}
 
-	// Create a done channel to control 'ListObjects' go routine.
-	doneCh := make(chan struct{})
-
-	// Indicate to our routine to exit cleanly upon return.
-	defer close(doneCh)
-
-	logrus.Infof("reading files in '%s'", syncDir)
-	localFiles, err := scanDir(syncDir)
-	if err != nil {
-		log.Fatalf("failed to read local filesystem: %v", err)
-		return
-	}
-
-	logrus.Infof("listing objects in '%s'", bucketName)
-
-	remoteFiles := make([]string, 0)
-	objectCh := minioClient.ListObjects(bucketName, "", true, doneCh)
-	for object := range objectCh {
-		if strings.Contains(object.Key, "minio.sys.tmp") {
-			continue
-		}
-
-		if object.Err != nil {
-			fmt.Println(object.Err)
+	// every 10 seconds
+	for {
+		logrus.Infof("reading files in '%s'", syncDir)
+		localFiles, err := scanDir(syncDir)
+		if err != nil {
+			log.Fatalf("failed to read local filesystem: %v", err)
 			return
 		}
 
-		remoteFiles = append(remoteFiles, object.Key)
-	}
+		logrus.Infof("listing objects in '%s'", bucketName)
 
-	localDiff := difference(localFiles, remoteFiles)
-	if len(localDiff) != 0 {
-		logrus.Warnf("found %d local files not in remote", len(localDiff))
-		for _, file := range localDiff {
-			logrus.Printf(" ... %s", file)
+		remoteFiles := make([]string, 0)
+		var remoteSize int64
+
+		// Create a done channel to control 'ListObjects' go routine.
+		doneCh := make(chan struct{})
+		defer close(doneCh)
+
+		objectCh := minioClient.ListObjects(bucketName, "", true, doneCh)
+		for object := range objectCh {
+			if strings.Contains(object.Key, "minio.sys.tmp") {
+				continue
+			}
+
+			if object.Err != nil {
+				fmt.Println(object.Err)
+				return
+			}
+
+			// TODO(jaredallard): validate local files
+			remoteSize = remoteSize + object.Size
+			remoteFiles = append(remoteFiles, object.Key)
 		}
-	}
 
-	remoteDiff := difference(remoteFiles, localFiles)
-	if len(remoteDiff) == 0 {
-		logrus.Infoln("no new remote files.")
-		return
-	}
+		logrus.Infof("remote has %d remote files, size %s", len(remoteFiles), humanize.Bytes(uint64(remoteSize)))
 
-	logrus.Infof("found %d remote files not existing locally", len(remoteDiff))
-	for i, file := range remoteDiff {
-		total := float64(len(remoteDiff))
-		pos := float64(i + 1)
-		progress := (pos / total) * 100
-		logrus.Printf(
-			"downloading '%s' [%d of %d (%s%%)]",
-			file,
-			int(pos),
-			int(total),
-			fmt.Sprintf("%.2f", progress),
-		)
-
-		err := downloadObject(minioClient, bucketName, file, filepath.Join(syncDir, file))
-		if err != nil {
-			logrus.Warnf("failed to download file '%s': %v", file, err)
+		localDiff := difference(localFiles, remoteFiles)
+		if len(localDiff) != 0 {
+			logrus.Warnf("found %d local files not in remote", len(localDiff))
+			for _, file := range localDiff {
+				logrus.Warnf(" ... %s", file)
+			}
 		}
+
+		remoteDiff := difference(remoteFiles, localFiles)
+		if len(remoteDiff) == 0 {
+			logrus.Infoln("no new remote files.")
+			return
+		}
+
+		logrus.Infof("found %d remote files new files", len(remoteDiff))
+		for i, file := range remoteDiff {
+			total := float64(len(remoteDiff))
+			pos := float64(i + 1)
+			progress := (pos / total) * 100
+
+			logrus.Printf(
+				"downloading '%s' [%d of %d (%s%%)]",
+				file,
+				int(pos),
+				int(total),
+				fmt.Sprintf("%.2f", progress),
+			)
+
+			localFile := filepath.Join(syncDir, file)
+			err := downloadObject(minioClient, bucketName, file, localFile)
+			if err != nil {
+				logrus.Warnf("failed to download file '%s': %v", file, err)
+
+				if err := os.Remove(localFile); err != nil && !os.IsNotExist(err) {
+					logrus.Warnf("failed to cleanup file: %v", err)
+				}
+			}
+		}
+
+		logrus.Println("sleeping for 10 seconds ...")
+		time.Sleep(time.Second * 10)
 	}
 }

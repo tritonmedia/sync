@@ -7,7 +7,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-ini/ini v1.44.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
-	github.com/minio/minio-go v6.0.14+incompatible
+	github.com/minio/minio-go v6.0.48+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/objx v0.2.0 // indirect

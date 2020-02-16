@@ -11,7 +11,7 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/dustin/go-humanize"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 	"github.com/sirupsen/logrus"
 	"github.com/tritonmedia/sync/pkg/config"
 )

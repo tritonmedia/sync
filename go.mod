@@ -3,7 +3,7 @@ module github.com/tritonmedia/sync
 go 1.12
 
 require (
-	github.com/cheggaaa/pb/v3 v3.0.4
+	github.com/cheggaaa/pb/v3 v3.0.5
 	github.com/dustin/go-humanize v1.0.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/minio/minio-go/v6 v6.0.57
